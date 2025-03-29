@@ -13,6 +13,9 @@ target_include_directories(spine-cpp PUBLIC spine-cpp/include)
 add_library(spine-cpp-lite STATIC ${SOURCES} ${INCLUDES} spine-cpp-lite/spine-cpp-lite.cpp)
 target_include_directories(spine-cpp-lite PUBLIC spine-cpp/include spine-cpp-lite)
 
+set_property(TARGET spine-cpp PROPERTY
+                                      MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 # Install target
 install(TARGETS spine-cpp EXPORT spine-cpp_TARGETS DESTINATION dist/lib)
 install(FILES ${INCLUDES} DESTINATION dist/include)
