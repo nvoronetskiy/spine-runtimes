@@ -144,6 +144,7 @@ spine-ts/spine-core/dist
 spine-ts/spine-canvas/dist
 spine-ts/spine-webgl/dist
 spine-ts/spine-player/dist
+spine-ts/spine-webcomponents/dist
 spine-ts/spine-threejs/dist
 spine-ts/spine-phaser-v3/dist
 spine-ts/spine-phaser-v4/dist
@@ -220,3 +221,4 @@ spine-godot/build/version.txt
 spine-godot/vc140.pdb
 spine-godot/example-v4-extension/bin
 spine-godot/example-v4-extension/MoltenVK.xcframework
+spine-flutter/example/android/app/.cxx

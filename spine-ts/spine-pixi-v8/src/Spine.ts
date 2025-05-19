@@ -33,7 +33,6 @@ import {
 	Cache,
 	Container,
 	ContainerOptions,
-	DEG_TO_RAD,
 	DestroyOptions,
 	fastCopy,
 	Graphics,
@@ -390,6 +389,8 @@ export class Spine extends ViewContainer {
 		}
 
 		super({});
+
+		this.allowChildren = true;
 
 		const skeletonData = options instanceof SkeletonData ? options : options.skeletonData;
 
@@ -785,14 +786,25 @@ export class Spine extends ViewContainer {
 		container.visible = this.skeleton.drawOrder.includes(slot) && followAttachmentValue;
 
 		if (container.visible) {
-			const bone = slot.bone;
+			let bone: Bone | null = slot.bone;
 
 			container.position.set(bone.worldX, bone.worldY);
+			container.angle = bone.getWorldRotationX();
 
-			container.scale.x = bone.getWorldScaleX();
-			container.scale.y = bone.getWorldScaleY();
+			let cumulativeScaleX = 1;
+			let cumulativeScaleY = 1;
+			while (bone) {
+				cumulativeScaleX *= bone.scaleX;
+				cumulativeScaleY *= bone.scaleY;
+				bone = bone.parent;
+			};
 
-			container.rotation = bone.getWorldRotationX() * DEG_TO_RAD;
+			if (cumulativeScaleX < 0) container.angle -= 180;
+
+			container.scale.set(
+				slot.bone.getWorldScaleX() * Math.sign(cumulativeScaleX),
+				slot.bone.getWorldScaleY() * Math.sign(cumulativeScaleY),
+			);
 
 			container.alpha = this.skeleton.color.a * slot.color.a;
 		}
@@ -1054,8 +1066,8 @@ export class Spine extends ViewContainer {
 	 * Use this method to instantiate a Spine game object.
 	 * Before instantiating a Spine game object, the skeleton (`.skel` or `.json`) and the atlas text files must be loaded into the Assets. For example:
 	 * ```
-	 * PIXI.Assets.add("sackData", "./assets/sack-pro.skel");
-	 * PIXI.Assets.add("sackAtlas", "./assets/sack-pma.atlas");
+	 * PIXI.Assets.add("sackData", "/assets/sack-pro.skel");
+	 * PIXI.Assets.add("sackAtlas", "/assets/sack-pma.atlas");
 	 * await PIXI.Assets.load(["sackData", "sackAtlas"]);
 	 * ```
 	 * Once a Spine game object is created, its skeleton data is cached into {@link Cache} using the key:
