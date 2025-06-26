@@ -49,6 +49,7 @@ import {
 	RegionAttachment,
 	MeshAttachment,
 	Bone,
+	Skin,
 } from "@esotericsoftware/spine-webgl";
 import { AttributeTypes, castValue, isBase64, Rectangle } from "./wcUtils.js";
 import { SpineWebComponentOverlay } from "./SpineWebComponentOverlay.js";
@@ -56,16 +57,15 @@ import { SpineWebComponentOverlay } from "./SpineWebComponentOverlay.js";
 type UpdateSpineWidgetFunction = (delta: number, skeleton: Skeleton, state: AnimationState) => void;
 
 export type OffScreenUpdateBehaviourType = "pause" | "update" | "pose";
-export type ModeType = "inside" | "origin";
-export type FitType = "fill" | "width" | "height" | "contain" | "cover" | "none" | "scaleDown";
+export type FitType = "fill" | "width" | "height" | "contain" | "cover" | "none" | "scaleDown" | "origin";
 export type AnimationsInfo = Record<string, {
 	cycle?: boolean,
-	holdDurationLastAnimation?: number;
+	repeatDelay?: number;
 	animations: Array<AnimationsType>
 }>;
 export type AnimationsType = { animationName: string | "#EMPTY#", loop?: boolean, delay?: number, mixDuration?: number };
-export type CursorEventType = "down" | "up" | "enter" | "leave" | "move" | "drag";
-export type CursorEventTypesInput = Exclude<CursorEventType, "enter" | "leave">;
+export type PointerEventType = "down" | "up" | "enter" | "leave" | "move" | "drag";
+export type PointerEventTypesInput = Exclude<PointerEventType, "enter" | "leave">;
 
 // The properties that map to widget attributes
 interface WidgetAttributes {
@@ -77,9 +77,8 @@ interface WidgetAttributes {
 	animation?: string
 	animations?: AnimationsInfo
 	defaultMix?: number
-	skin?: string
+	skin?: string[]
 	fit: FitType
-	mode: ModeType
 	xAxis: number
 	yAxis: number
 	offsetX: number
@@ -96,8 +95,8 @@ interface WidgetAttributes {
 	autoCalculateBounds: boolean
 	width: number
 	height: number
-	isDraggable: boolean
-	isInteractive: boolean
+	drag: boolean
+	interactive: boolean
 	debug: boolean
 	identifier: string
 	manualStart: boolean
@@ -105,7 +104,7 @@ interface WidgetAttributes {
 	pages?: Array<number>
 	clip: boolean
 	offScreenUpdateBehaviour: OffScreenUpdateBehaviourType
-	noSpinner: boolean
+	spinner: boolean
 }
 
 // The methods user can override to have custom behaviour
@@ -221,14 +220,14 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 	 * Optional: The name of the skin to be set
 	 * Connected to `skin` attribute.
 	 */
-	public get skin (): string | undefined {
+	public get skin (): string[] | undefined {
 		return this._skin;
 	}
-	public set skin (value: string | undefined) {
+	public set skin (value: string[] | undefined) {
 		this._skin = value;
 		this.initWidget();
 	}
-	private _skin?: string
+	private _skin?: string[]
 
 	/**
 	 * Specify the way the skeleton is sized within the element automatically changing its `scaleX` and `scaleY`.
@@ -240,18 +239,10 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 	 * - `cover`: as small as possible while still covering the entire element container.
 	 * - `scaleDown`: scale the skeleton down to ensure that the skeleton fits within the element container.
 	 * - `none`: display the skeleton without autoscaling it.
+	 * - `origin`: the skeleton origin is centered with the element container regardless of the bounds.
 	 * Connected to `fit` attribute.
 	 */
 	public fit: FitType = "contain";
-
-	/**
-	 * Specify the way the skeleton is centered within the element container:
-	 * - `inside`: the skeleton bounds center is centered with the element container (Default)
-	 * - `origin`: the skeleton origin is centered with the element container regardless of the bounds.
-	 * Origin does not allow to specify any {@link fit} type and guarantee the skeleton to not be autoscaled.
-	 * Connected to `mode` attribute.
-	 */
-	public mode: ModeType = "inside";
 
 	/**
 	 * The x offset of the skeleton world origin x axis as a percentage of the element container width
@@ -402,9 +393,9 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 
 	/**
 	 * If true, the widget is draggable
-	 * Connected to `isdraggable` attribute.
+	 * Connected to `drag` attribute.
 	 */
-	public isDraggable = false;
+	public drag = false;
 
 	/**
 	 * The x of the root relative to the canvas/webgl context center in spine world coordinates.
@@ -419,49 +410,49 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 	public worldY = Infinity;
 
 	/**
-	 * The x coordinate of the cursor relative to the cursor relative to the skeleton root in spine world coordinates.
+	 * The x coordinate of the pointer relative to the pointer relative to the skeleton root in spine world coordinates.
 	 * This is an experimental property and might be removed in the future.
 	 */
-	public cursorWorldX = 1;
+	public pointerWorldX = 1;
 
 	/**
-	 * The x coordinate of the cursor relative to the cursor relative to the skeleton root in spine world coordinates.
+	 * The x coordinate of the pointer relative to the pointer relative to the skeleton root in spine world coordinates.
 	 * This is an experimental property and might be removed in the future.
 	 */
-	public cursorWorldY = 1;
+	public pointerWorldY = 1;
 
 	/**
 	 * If true, the widget is interactive
-	 * Connected to `isinteractive` attribute.
+	 * Connected to `interactive` attribute.
 	 * This is an experimental property and might be removed in the future.
 	 */
-	public isInteractive = false;
+	public interactive = false;
 
 	/**
-	 * If the widget is interactive, this method is invoked with a {@link CursorEventType} when the cursor
+	 * If the widget is interactive, this method is invoked with a {@link PointerEventType} when the pointer
 	 * performs actions within the widget bounds (for example, it enter or leaves the bounds).
 	 * By default, the function does nothing.
 	 * This is an experimental property and might be removed in the future.
 	 */
-	public cursorEventCallback = (event: CursorEventType, originalEvent?: UIEvent) => { }
+	public pointerEventCallback = (event: PointerEventType, originalEvent?: UIEvent) => { }
 
 	// TODO: probably it makes sense to associate a single callback to a groups of slots to avoid the same callback to be called for each slot of the group
 	/**
 	 * This methods allows to associate to a Slot a callback. For these slots, if the widget is interactive,
-	 * when the cursor performs actions within the slot's attachment the associated callback is invoked with
-	 * a {@link CursorEventType} (for example, it enter or leaves the slot's attachment bounds).
+	 * when the pointer performs actions within the slot's attachment the associated callback is invoked with
+	 * a {@link PointerEventType} (for example, it enter or leaves the slot's attachment bounds).
 	 * This is an experimental property and might be removed in the future.
 	 */
-	public addCursorSlotEventCallback (slot: number | string | Slot, slotFunction: (slot: Slot, event: CursorEventType) => void) {
-		this.cursorSlotEventCallbacks.set(this.getSlotFromRef(slot), { slotFunction, inside: false });
+	public addPointerSlotEventCallback (slot: number | string | Slot, slotFunction: (slot: Slot, event: PointerEventType) => void) {
+		this.pointerSlotEventCallbacks.set(this.getSlotFromRef(slot), { slotFunction, inside: false });
 	}
 
 	/**
-	 * Remove callbacks added through {@link addCursorSlotEventCallback}.
+	 * Remove callbacks added through {@link addPointerSlotEventCallback}.
 	 * @param slot: the slot reference to which remove the associated callback
 	 */
-	public removeCursorSlotEventCallbacks (slot: number | string | Slot) {
-		this.cursorSlotEventCallbacks.delete(this.getSlotFromRef(slot));
+	public removePointerSlotEventCallbacks (slot: number | string | Slot) {
+		this.pointerSlotEventCallbacks.delete(this.getSlotFromRef(slot));
 	}
 
 	private getSlotFromRef (slotRef: number | string | Slot): Slot {
@@ -484,7 +475,7 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 	public debug = false;
 
 	/**
-	 * An identifier to obtain this widget using the {@link getSpineWidget} function.
+	 * An identifier to obtain this widget using the {@link getSkeleton} function.
 	 * This is useful when you need to interact with the widget using js.
 	 * Connected to `identifier` attribute.
 	 */
@@ -540,10 +531,10 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 	public offScreenUpdateBehaviour: OffScreenUpdateBehaviourType = "pause";
 
 	/**
-	 * If false (default), a Spine loading spinner is shown during asset loading
-	 * Connected to `no-spinner` attribute.
+	 * If true, a Spine loading spinner is shown during asset loading. Default to false.
+	 * Connected to `spinner` attribute.
 	 */
-	public noSpinner = false;
+	public spinner = false;
 
 	/**
 	 * Replace the default state and skeleton update logic for this widget.
@@ -608,7 +599,7 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 	/**
 	 * The {@link LoadingScreenWidget} of this widget.
 	 * This is instantiated only if it is really necessary.
-	 * For example, if {@link noSpinner} is `false`, this property value is null
+	 * For example, if {@link spinner} is `false`, this property value is null
 	 */
 	public loadingScreen: LoadingScreen | null = null;
 
@@ -705,11 +696,11 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 		animations: { propertyName: "animations", type: "animationsInfo", defaultValue: undefined },
 		"animation-bounds": { propertyName: "animationsBound", type: "array-string", defaultValue: undefined },
 		"default-mix": { propertyName: "defaultMix", type: "number", defaultValue: 0 },
-		skin: { propertyName: "skin", type: "string" },
+		skin: { propertyName: "skin", type: "array-string" },
 		width: { propertyName: "width", type: "number", defaultValue: -1 },
 		height: { propertyName: "height", type: "number", defaultValue: -1 },
-		isdraggable: { propertyName: "isDraggable", type: "boolean" },
-		isinteractive: { propertyName: "isInteractive", type: "boolean" },
+		drag: { propertyName: "drag", type: "boolean" },
+		interactive: { propertyName: "interactive", type: "boolean" },
 		"x-axis": { propertyName: "xAxis", type: "number" },
 		"y-axis": { propertyName: "yAxis", type: "number" },
 		"offset-x": { propertyName: "offsetX", type: "number" },
@@ -727,11 +718,10 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 		debug: { propertyName: "debug", type: "boolean" },
 		"manual-start": { propertyName: "manualStart", type: "boolean" },
 		"start-when-visible": { propertyName: "startWhenVisible", type: "boolean" },
-		"no-spinner": { propertyName: "noSpinner", type: "boolean" },
+		"spinner": { propertyName: "spinner", type: "boolean" },
 		clip: { propertyName: "clip", type: "boolean" },
 		pages: { propertyName: "pages", type: "array-number" },
 		fit: { propertyName: "fit", type: "fitType", defaultValue: "contain" },
-		mode: { propertyName: "mode", type: "modeType", defaultValue: "inside" },
 		offscreen: { propertyName: "offScreenUpdateBehaviour", type: "offScreenUpdateBehaviourType", defaultValue: "pause" },
 	}
 
@@ -1008,18 +998,28 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 		// skeleton.scaleX = this.dprScale;
 		// skeleton.scaleY = this.dprScale;
 
+		this.loading = false;
+
 		// the bounds are calculated the first time, if no custom bound is provided
 		this.initWidget(this.bounds.width <= 0 || this.bounds.height <= 0);
 
-		this.loading = false;
 		return this;
 	}
 
 	private initWidget (forceRecalculate = false) {
+		if (this.loading) return;
+
 		const { skeleton, state, animation, animations: animationsInfo, skin, defaultMix } = this;
 
 		if (skin) {
-			skeleton?.setSkinByName(skin);
+			if (skin.length === 1) {
+				skeleton?.setSkinByName(skin[0]);
+			} else {
+				const customSkin = new Skin("custom");
+				for (const s of skin) customSkin.addSkin(skeleton?.data.findSkin(s) as Skin);
+				skeleton?.setSkin(customSkin);
+			}
+
 			skeleton?.setSlotsToSetupPose();
 		}
 
@@ -1027,7 +1027,7 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 			state.data.defaultMix = defaultMix;
 
 			if (animationsInfo) {
-				for (const [trackIndexString, { cycle, animations, holdDurationLastAnimation }] of Object.entries(animationsInfo)) {
+				for (const [trackIndexString, { cycle, animations, repeatDelay }] of Object.entries(animationsInfo)) {
 					const cycleFn = () => {
 						const trackIndex = Number(trackIndexString);
 						for (const [index, { animationName, delay, loop, mixDuration }] of animations.entries()) {
@@ -1051,8 +1051,8 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 							if (cycle && index === animations.length - 1) {
 								track.listener = {
 									complete: () => {
-										if (holdDurationLastAnimation)
-											setTimeout(() => cycleFn(), 1000 * holdDurationLastAnimation);
+										if (repeatDelay)
+											setTimeout(() => cycleFn(), 1000 * repeatDelay);
 										else
 											cycleFn();
 										delete track.listener?.complete;
@@ -1094,44 +1094,44 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 	/**
 	 * @internal
 	 */
-	public cursorInsideBounds = false;
+	public pointerInsideBounds = false;
 
 	private verticesTemp = Utils.newFloatArray(2 * 1024);
 
 	/**
 	 * @internal
 	 */
-	public cursorSlotEventCallbacks: Map<Slot, {
-		slotFunction: (slot: Slot, event: CursorEventType, originalEvent?: UIEvent) => void,
+	public pointerSlotEventCallbacks: Map<Slot, {
+		slotFunction: (slot: Slot, event: PointerEventType, originalEvent?: UIEvent) => void,
 		inside: boolean,
 	}> = new Map();
 
 	/**
 	 * @internal
 	 */
-	public cursorEventUpdate (type: CursorEventTypesInput, originalEvent?: UIEvent) {
-		if (!this.isInteractive) return;
+	public pointerEventUpdate (type: PointerEventTypesInput, originalEvent?: UIEvent) {
+		if (!this.interactive) return;
 
 		this.checkBoundsInteraction(type, originalEvent);
 		this.checkSlotInteraction(type, originalEvent);
 	}
 
-	private checkBoundsInteraction (type: CursorEventTypesInput, originalEvent?: UIEvent) {
-		if (this.isCursorInsideBounds()) {
+	private checkBoundsInteraction (type: PointerEventTypesInput, originalEvent?: UIEvent) {
+		if (this.isPointerInsideBounds()) {
 
-			if (!this.cursorInsideBounds) {
-				this.cursorEventCallback("enter", originalEvent);
+			if (!this.pointerInsideBounds) {
+				this.pointerEventCallback("enter", originalEvent);
 			}
-			this.cursorInsideBounds = true;
+			this.pointerInsideBounds = true;
 
-			this.cursorEventCallback(type, originalEvent);
+			this.pointerEventCallback(type, originalEvent);
 
 		} else {
 
-			if (this.cursorInsideBounds) {
-				this.cursorEventCallback("leave", originalEvent);
+			if (this.pointerInsideBounds) {
+				this.pointerEventCallback("leave", originalEvent);
 			}
-			this.cursorInsideBounds = false;
+			this.pointerInsideBounds = false;
 
 		}
 	}
@@ -1139,11 +1139,11 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 	/**
 	 * @internal
 	 */
-	public isCursorInsideBounds (): boolean {
+	public isPointerInsideBounds (): boolean {
 		if (this.isOffScreenAndWasMoved() || !this.skeleton) return false;
 
-		const x = this.cursorWorldX / this.skeleton.scaleX;
-		const y = this.cursorWorldY / this.skeleton.scaleY;
+		const x = this.pointerWorldX / this.skeleton.scaleX;
+		const y = this.pointerWorldY / this.skeleton.scaleY;
 
 		return (
 			x >= this.bounds.x &&
@@ -1153,8 +1153,8 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 		);
 	}
 
-	private checkSlotInteraction (type: CursorEventTypesInput, originalEvent?: UIEvent) {
-		for (let [slot, interactionState] of this.cursorSlotEventCallbacks) {
+	private checkSlotInteraction (type: PointerEventTypesInput, originalEvent?: UIEvent) {
+		for (let [slot, interactionState] of this.pointerSlotEventCallbacks) {
 			if (!slot.bone.active) continue;
 			let attachment = slot.getAttachment();
 
@@ -1176,7 +1176,7 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 			}
 
 			// here we have only "move" and "drag" events
-			if (this.isPointInPolygon(vertices, hullLength, [this.cursorWorldX, this.cursorWorldY])) {
+			if (this.isPointInPolygon(vertices, hullLength, [this.pointerWorldX, this.pointerWorldY])) {
 
 				if (!inside) {
 					interactionState.inside = true;
@@ -1231,10 +1231,10 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 	* Other utilities
 	*/
 
-	public boneFollowerList: Array<{ slot: Slot, bone: Bone, element: HTMLElement, followAttachmentAttach: boolean, followRotation: boolean, followOpacity: boolean, followScale: boolean, hideAttachment: boolean }> = [];
-	public followSlot (slotName: string | Slot, element: HTMLElement, options: { followAttachmentAttach?: boolean, followRotation?: boolean, followOpacity?: boolean, followScale?: boolean, hideAttachment?: boolean } = {}) {
+	public boneFollowerList: Array<{ slot: Slot, bone: Bone, element: HTMLElement, followVisibility: boolean, followRotation: boolean, followOpacity: boolean, followScale: boolean, hideAttachment: boolean }> = [];
+	public followSlot (slotName: string | Slot, element: HTMLElement, options: { followVisibility?: boolean, followRotation?: boolean, followOpacity?: boolean, followScale?: boolean, hideAttachment?: boolean } = {}) {
 		const {
-			followAttachmentAttach = false,
+			followVisibility = false,
 			followRotation = true,
 			followOpacity = true,
 			followScale = true,
@@ -1253,7 +1253,7 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 		element.style.left = '0px';
 		element.style.display = 'none';
 
-		this.boneFollowerList.push({ slot, bone: slot.bone, element, followAttachmentAttach, followRotation, followOpacity, followScale, hideAttachment });
+		this.boneFollowerList.push({ slot, bone: slot.bone, element, followVisibility, followRotation, followOpacity, followScale, hideAttachment });
 		this.overlay.addSlotFollowerElement(element);
 	}
 	public unfollowSlot (element: HTMLElement): HTMLElement | undefined {
@@ -1325,11 +1325,21 @@ export class SpineWebComponentSkeleton extends HTMLElement implements Disposable
 
 customElements.define("spine-skeleton", SpineWebComponentSkeleton);
 
-export function getSpineWidget (identifier: string): SpineWebComponentSkeleton {
+/**
+ * Return the first {@link SpineWebComponentSkeleton} with the given {@link SpineWebComponentSkeleton.identifier}
+ * @param identifier The {@link SpineWebComponentSkeleton.identifier} to search on the DOM
+ * @returns A skeleton web component instance with the given identifier
+ */
+export function getSkeleton (identifier: string): SpineWebComponentSkeleton {
 	return document.querySelector(`spine-skeleton[identifier=${identifier}]`) as SpineWebComponentSkeleton;
 }
 
-export function createSpineWidget (parameters: WidgetAttributes): SpineWebComponentSkeleton {
+/**
+ * Create a {@link SpineWebComponentSkeleton} with the given {@link WidgetAttributes}.
+ * @param parameters The options to pass to the {@link SpineWebComponentSkeleton}
+ * @returns The skeleton web component instance created
+ */
+export function createSkeleton (parameters: WidgetAttributes): SpineWebComponentSkeleton {
 	const widget = document.createElement("spine-skeleton") as SpineWebComponentSkeleton;
 
 	Object.entries(SpineWebComponentSkeleton.attributesDescription).forEach(entry => {

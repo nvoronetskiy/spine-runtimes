@@ -1,16 +1,16 @@
 /******************************************************************************
  * Spine Runtimes License Agreement
- * Last updated July 28, 2023. Replaces all prior versions.
+ * Last updated April 5, 2025. Replaces all prior versions.
  *
- * Copyright (c) 2013-2023, Esoteric Software LLC
+ * Copyright (c) 2013-2025, Esoteric Software LLC
  *
  * Integration of the Spine Runtimes into software or otherwise creating
  * derivative works of the Spine Runtimes is permitted under the terms and
  * conditions of Section 2 of the Spine Editor License Agreement:
  * http://esotericsoftware.com/spine-editor-license
  *
- * Otherwise, it is permitted to integrate the Spine Runtimes into software or
- * otherwise create derivative works of the Spine Runtimes (collectively,
+ * Otherwise, it is permitted to integrate the Spine Runtimes into software
+ * or otherwise create derivative works of the Spine Runtimes (collectively,
  * "Products"), provided that each user of the Products must obtain their own
  * Spine Editor license and redistribution of the Products in any form must
  * include this license and copyright notice.
@@ -23,8 +23,8 @@
  * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES,
  * BUSINESS INTERRUPTION, OR LOSS OF USE, DATA, OR PROFITS) HOWEVER CAUSED AND
  * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THE
- * SPINE RUNTIMES, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THE SPINE RUNTIMES, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *****************************************************************************/
 
 #include "SpineSprite.h"
@@ -179,6 +179,7 @@ static void add_triangles(SpineMesh2D *mesh_instance,
 #else
 	auto texture = renderer_object->texture;
 	auto normal_map = renderer_object->normal_map;
+	auto specular_map = renderer_object->specular_map;
 	VisualServer::get_singleton()->canvas_item_add_triangle_array(mesh_instance->get_canvas_item(),
 																  indices,
 																  vertices,
@@ -188,7 +189,8 @@ static void add_triangles(SpineMesh2D *mesh_instance,
 																  Vector<float>(),
 																  texture.is_null() ? RID() : texture->get_rid(),
 																  -1,
-																  normal_map.is_null() ? RID() : normal_map->get_rid());
+																  normal_map.is_null() ? RID() : normal_map->get_rid(),
+																  specular_map.is_null() ? RID() : specular_map->get_rid());
 #endif
 #endif
 }
@@ -403,7 +405,8 @@ void SpineMesh2D::update_mesh(const Vector<Point2> &vertices,
 			Transform2D(),
 			Color(1, 1, 1, 1),
 			renderer_object->texture.is_null() ? RID() : renderer_object->texture->get_rid(),
-			renderer_object->normal_map.is_null() ? RID() : renderer_object->normal_map->get_rid());
+			renderer_object->normal_map.is_null() ? RID() : renderer_object->normal_map->get_rid(),
+			renderer_object->specular_map.is_null() ? RID() : renderer_object->specular_map->get_rid());
 #endif
 }
 #endif
