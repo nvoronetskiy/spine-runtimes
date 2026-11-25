@@ -8,10 +8,12 @@ file(GLOB INCLUDES "spine-cpp/include/**/*.h")
 file(GLOB SOURCES "spine-cpp/src/**/*.cpp")
 
 add_library(spine-cpp STATIC ${SOURCES} ${INCLUDES})
-target_include_directories(spine-cpp PUBLIC spine-cpp/include)
+target_include_directories(spine-cpp PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/spine-cpp/include>
+    $<INSTALL_INTERFACE:dist/include>
+)
 
-add_library(spine-cpp-lite STATIC ${SOURCES} ${INCLUDES} spine-cpp-lite/spine-cpp-lite.cpp)
-target_include_directories(spine-cpp-lite PUBLIC spine-cpp/include spine-cpp-lite)
+set_target_properties(spine-cpp PROPERTIES UNITY_BUILD ON)
 
 set_property(TARGET spine-cpp PROPERTY
                                       MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")

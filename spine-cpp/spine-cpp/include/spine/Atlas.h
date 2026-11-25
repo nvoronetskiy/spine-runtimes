@@ -36,6 +36,7 @@
 #include <spine/SpineString.h>
 #include <spine/HasRendererObject.h>
 #include "TextureRegion.h"
+#include <spine/SpineTextureRef.h>
 
 namespace spine {
 	enum Format {
@@ -85,12 +86,12 @@ namespace spine {
 		int width, height;
 		bool pma;
         int index;
-        void *texture;
+        SpineTextureRef texture;
 
 		explicit AtlasPage(const String &inName) : name(inName), format(Format_RGBA8888),
 												   minFilter(TextureFilter_Nearest),
 												   magFilter(TextureFilter_Nearest), uWrap(TextureWrap_ClampToEdge),
-												   vWrap(TextureWrap_ClampToEdge), width(0), height(0), pma(false), index(0), texture(NULL) {
+												   vWrap(TextureWrap_ClampToEdge), width(0), height(0), pma(false), index(0), texture(nullptr) {
 		}
 	};
 
